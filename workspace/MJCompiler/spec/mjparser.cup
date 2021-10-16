@@ -1,0 +1,296 @@
+package rs.ac.bg.etf.pp1;
+
+import java_cup.runtime.*;
+import org.apache.log4j.*;
+
+import rs.ac.bg.etf.pp1.ast.*;
+import java.util.ArrayList;
+import java.util.List;
+import rs.ac.bg.etf.pp1.CompilerError.CompilerErrorType;
+
+
+parser code {:
+	
+	boolean errorDetected = false;
+	
+	Logger log = Logger.getLogger(getClass());
+   	List<CompilerError> errors = new ArrayList<>();
+
+	public List<CompilerError> getSyntaxErrors(){
+    	return errors;
+    }
+        
+    public void report_fatal_error(String message, Object info) throws java.lang.Exception {
+      done_parsing();
+      report_error(message, info);
+    }
+  
+    public void syntax_error(Symbol cur_token) {
+        report_error("\nSintaksna greska", cur_token);
+    }
+  
+    public void unrecovered_syntax_error(Symbol cur_token) throws java.lang.Exception {
+        report_fatal_error("Fatalna greska, parsiranje se ne moze nastaviti", cur_token);
+    }
+
+    public void report_error(String message, Object info) {
+    	errorDetected = true;
+    	StringBuilder msg = new StringBuilder(message); 
+    	if (info instanceof Symbol) {
+			int line = ((Symbol)info).left;
+            msg.append(" na liniji ").append(line);
+			CompilerError error = new CompilerError(line, msg.toString(), CompilerErrorType.SYNTAX_ERROR);
+			errors.add(error);
+		}
+        log.error(msg.toString());
+    }
+    
+    public void report_info(String message, Object info) {
+    	StringBuilder msg = new StringBuilder(message); 
+    	if (info instanceof Symbol)
+            msg.append (" na liniji ").append(((Symbol)info).left);
+        log.info(msg.toString());
+    }
+    
+:}
+
+scan with {:
+	Symbol s = this.getScanner().next_token();
+	if (s != null && s.value != null) 
+		log.info(s.toString() + " " + s.value.toString());
+	return s;
+:}
+
+
+terminal PROG, LBRACE, RBRACE, SEMI, LPAREN, RPAREN, COMMA, PRINT, RETURN, PLUS, EQUAL, VOID;
+terminal COLON, NEW, DOT, DIV, MINUS, DEC, INC, CONST, AND, SWITCH, CASE;
+terminal LESS, READ, GREATER, NOTEQUAL, WHILE, DO, CLASS, LESSEQ, CONTINUE, LSQBRACE, OR;
+terminal RSQBRACE, GREATEREQ, MOD, MUL, BREAK, ISEQUAL;
+terminal Boolean BOOL;
+terminal Integer NUMBER;
+terminal String IDENT;
+terminal Character CHAR;
+terminal IF, ELSE;
+
+nonterminal Program;
+nonterminal GlobalDeclaration, GlobalDeclRec;
+nonterminal VarDeclaration, VarDeclRec, VarDecMoreOpt, OptArr;
+nonterminal ConstDeclaration, ConstDeclMoreOpt, ConstVal;
+nonterminal ClassDeclaration, ClassMethodDecl;
+nonterminal MethodDeclaration, MethodDeclarationRec, FormParams, FormParsRec;
+nonterminal StatementRec, NumConstOpt, Statement;
+nonterminal DesignatorStatement, DesignStateOpt, DesignatorOpt, ActPars, ActParsRec;
+nonterminal OptExpr, OptMinus, ExprCaseRec, OptRelop;
+nonterminal FactorExprOpt, FactorActParsOpt;
+nonterminal AssignOp, Relop, Addop, Mulop;
+nonterminal StartDoWhile, EndDoWhile, IfCondition, Else;
+nonterminal LBraceSwitch, RBraceSwitch, DesignatorArr, And, Or, WhileCondition;
+
+nonterminal rs.etf.pp1.symboltable.concepts.Obj ProgName, ReturnAndName, VarDecName;
+nonterminal rs.etf.pp1.symboltable.concepts.Obj Designator, ConstDeclName;
+nonterminal rs.etf.pp1.symboltable.concepts.Struct Expr, Term, Factor, Type;
+nonterminal rs.etf.pp1.symboltable.concepts.Struct Condition, CondTerm, CondFact;
+
+precedence  left  ELSE;
+
+
+/* Program & Global Declaration */
+
+Program 			::= (Program) PROG ProgName GlobalDeclRec LBRACE MethodDeclarationRec RBRACE;
+
+ProgName			::= (ProgName) IDENT:name;
+
+GlobalDeclRec 		::= (GlobalDecl) GlobalDeclRec GlobalDeclaration
+					| (NoGlobalDec);
+
+GlobalDeclaration 	::= (GlobalVar) VarDeclaration
+					| (GlobalConst) ConstDeclaration
+					| (GlobalClass) ClassDeclaration;
+			
+/* Const Declaration */
+
+ConstDeclaration 	::= (ConstDecl) CONST Type ConstDeclMoreOpt SEMI;
+
+ConstDeclMoreOpt 	::= (ConstDeclaMoreOpt) ConstDeclMoreOpt COMMA ConstDeclName
+					| (NoConstDeclMoreOpt) ConstDeclName;
+
+ConstDeclName 		::= (ConstDeclName) IDENT:name AssignOp ConstVal;
+
+ConstVal 			::=	(ConstValNum) NUMBER:value
+					| (ConstValChar) CHAR:value
+					| (ConstValBool) BOOL:value;
+			
+Type 				::= (Type) IDENT:name;
+			
+/* Var declaration */
+
+VarDeclRec			::= (VarDeclR) VarDeclRec VarDeclaration
+					| (NoVarDeclR);
+
+VarDeclaration 		::= (VarDecl) Type VarDecMoreOpt SEMI
+					| (VarDeclError) Type error SEMI;
+
+VarDecMoreOpt 		::= (VarDecMore) VarDecMoreOpt COMMA VarDecName
+					| (VarDecMoreError) error COMMA VarDecName
+					| (NoVarDec) VarDecName;
+
+VarDecName 			::= (VarDecName) IDENT:name OptArr;
+
+OptArr 				::= (Array) LSQBRACE RSQBRACE
+					| (NoArray);
+
+/* Class Declaration */
+
+
+ClassDeclaration 	::= (ClassDecl) CLASS IDENT LBRACE VarDeclRec ClassMethodDecl RBRACE;
+
+
+ClassMethodDecl 	::= (ClassMethodDeclaration) LBRACE MethodDeclarationRec RBRACE
+					| (NoClassMethodDeclaration);
+						
+
+/* Method Declaration */
+
+MethodDeclarationRec::= (MethodDeclRec) MethodDeclarationRec MethodDeclaration
+					| (NoMethodDecl);
+
+MethodDeclaration	::= (MethodDecl) ReturnAndName LPAREN FormParams RPAREN VarDeclRec LBRACE StatementRec RBRACE
+					| (MethodDeclError) ReturnAndName LPAREN error RPAREN VarDeclRec LBRACE StatementRec RBRACE;
+
+ReturnAndName		::= (ReturnType) Type IDENT:name
+					| (ReturnVoid) VOID IDENT:name;
+				
+FormParams 			::= (FormParam) FormParsRec
+					| (NoFormParam);
+
+FormParsRec			::= (FormParsR) FormParsRec COMMA Type VarDecName
+					| (FromParsRError) error COMMA Type VarDecName
+					| (NoFromParsR) Type VarDecName;
+
+					
+					
+/* Statement */
+
+StatementRec		::= (StatementRecursive) StatementRec Statement
+					| (NoStatementRecursive);
+
+Statement 			::= (StatementDesignator) DesignatorStatement SEMI
+					| (StatementIfElse) IfCondition Statement Else Statement
+					| (StatementIf) IfCondition Statement
+					| (StatementWhile) StartDoWhile Statement EndDoWhile LPAREN WhileCondition RPAREN SEMI
+					| (StatementSwitch) SWITCH LPAREN Expr RPAREN LBraceSwitch ExprCaseRec RBraceSwitch
+					| (StatementBreak) BREAK SEMI
+					| (StatementCont) CONTINUE SEMI
+					| (StatementReturn) RETURN OptExpr SEMI
+					| (StatementRead) READ LPAREN Designator RPAREN SEMI
+					| (StatementPrint) PRINT LPAREN Expr NumConstOpt RPAREN SEMI
+					| (StatementInside) LBRACE StatementRec RBRACE;
+					
+IfCondition 		::= (IfCond) IF LPAREN Condition RPAREN
+					| (IfCondError) IF LPAREN error RPAREN;
+					
+
+Else				::= (Else) ELSE;
+					
+StartDoWhile		::= (StartDoWhile)  DO;
+
+EndDoWhile			::= (EndDoWhile) WHILE;
+
+WhileCondition		::= (WhileCondition) Condition;
+
+LBraceSwitch 		::= (LBraceSwitch) LBRACE;
+
+RBraceSwitch 		::= (RBraceSwitch) RBRACE;
+					
+NumConstOpt			::= (NumConst) SEMI NUMBER 
+					| (NoNumConst);
+
+/* Designator */
+
+DesignatorStatement	::= (DesignatorStatement) Designator DesignStateOpt;
+
+DesignStateOpt 		::= (DesignStateOptAssign) AssignOp Expr
+					| (DesignStateOptAssignError) AssignOp error
+					| (DesginStateOptAct) LPAREN ActPars RPAREN 
+					| (DesignStateOptInc) INC
+					| (DesignStateOptDec) DEC;
+					
+Designator			::= (DesignatorOptR) DesignatorArr DesignatorOpt
+					| (NoDesignatorOptR) IDENT:name;
+					
+DesignatorArr 		::= (DesignatorArr) Designator;
+
+DesignatorOpt 		::= (DesignatorOptDot) DOT IDENT
+					| (DesignatorOptExpr) LSQBRACE Expr RSQBRACE;
+					
+ActPars				::= (ActPar) ActParsRec
+					| (NoActPar);
+					
+ActParsRec			::= (ActParsR) Expr COMMA ActParsRec
+					| (ActParsNoR) Expr;
+						
+/* Conditions */
+		
+Condition			::= (ConditionMore) Condition Or CondTerm
+					| (ConditionNoMore) CondTerm;
+			
+Or					::= (Or) OR;
+					
+
+CondTerm			::= (CondTermMore) CondTerm And CondFact
+					| (CondTermNoMore) CondFact;
+					
+And					::= (And) AND;
+
+CondFact			::= (CondFact) Expr OptRelop;
+
+OptRelop			::= (OptRel) Relop Expr
+					| (NoOptRel);
+	
+/* Expr, Term & Factor */
+
+OptExpr 			::= (OptExp) Expr
+					| (NoOptExp);
+					
+ExprCaseRec			::= (ExprCase) ExprCaseRec CASE NUMBER COLON StatementRec
+					| (NoExprCase);
+										
+Expr				::= (ExprOptR) Expr Addop Term
+					| (NoExprOptR) OptMinus Term;
+
+OptMinus			::= (OptMin) MINUS
+					| (NoOptMin);
+
+Term				::= (TermOptR) Term Mulop Factor
+					| (NoTermOptR) Factor;
+
+Factor				::= (FactorDesignator) Designator FactorActParsOpt
+					| (FactorNum) NUMBER
+					| (FactorChar) CHAR
+					| (FactorBool) BOOL
+					| (FactorNew) NEW Type FactorExprOpt
+					| (FactorExpr) LPAREN Expr RPAREN;
+
+FactorExprOpt		::= (FactorExprOp) LSQBRACE Expr RSQBRACE
+					| (NoFactorExprOp);
+					
+FactorActParsOpt	::= (FactorActPars) LPAREN ActPars RPAREN
+					| (NoFactorActPars);
+		
+/* Operators */
+
+AssignOp			::= (AssignOp) EQUAL;
+
+Relop				::= (RelopEq) ISEQUAL
+					| (RelopNotEq) NOTEQUAL
+					| (RelopGreater) GREATER
+					| (RelopGreaterEq) GREATEREQ
+					| (RelopLess) LESS
+					| (RelopLessEq) LESSEQ;
+					
+Addop				::= (AddopPlus) PLUS
+					| (AddopMinus) MINUS;
+			
+Mulop				::= (MulopMul) MUL
+					| (MulopDiv) DIV
+					| (MulopMod) MOD;
