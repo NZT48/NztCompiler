@@ -2,7 +2,7 @@
 
 Compiler for MicroJava (Java-like language) - Project for Compiler Construction 1 Course (School of Electrical Engineering 2021)
 
-![](../images/compilation.png)
+![](./images/compilation.png)
 
 ## The MicroJava Language 
 
@@ -128,7 +128,8 @@ Whereas the Java VM uses operand names from the constant  pool that are resolved
 Java instructions encode the types of their operands so that a verifyer can check the consistency of an object file. MicroJava instructions do not encode operand types.
 
 Memory layout:
-![](../images/memory_layout.png)
+
+![](./images/memory_layout.png)
 
 
 ## Run configs for Eclipse IDE
